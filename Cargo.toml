@@ -11,3 +11,7 @@ keywords = []
 edition = "2024"
 rust-version = "1.89"
 publish = false
+
+[dependencies]
+clap = { version = "4.5", features = ["cargo"] }
+clap_complete = "4.5"
