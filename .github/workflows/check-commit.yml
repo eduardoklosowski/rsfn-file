@@ -1,0 +1,39 @@
+name: Check Commit
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Check Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup rust
+        run: rustup update 1.88 && rustup default 1.88
+
+      - name: Setup tools
+        run: rustup component add rustfmt clippy
+
+      - name: Run lints
+        run: make lint
+
+  test:
+    name: Check Test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup rust
+        run: rustup update 1.88 && rustup default 1.88
+
+      - name: Run tests
+        run: make test

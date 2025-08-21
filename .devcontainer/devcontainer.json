@@ -1,0 +1,23 @@
+{
+    "name": "rsfn-file",
+
+    "image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
+
+    "mounts": [
+        {
+            "type": "volume",
+            "source": "cargo-cache",
+            "target": "/usr/local/cargo"
+        }
+    ],
+
+    "postCreateCommand": "./.devcontainer/setup.sh",
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "editorconfig.editorconfig"
+            ]
+        }
+    }
+}
