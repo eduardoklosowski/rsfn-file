@@ -2,7 +2,11 @@ use std::{fs::File, io, path::PathBuf};
 
 use clap::{ArgAction, ArgMatches, Command, arg, command, value_parser};
 use clap_complete::{Shell, generate};
-use rsfn_file::header;
+use rsfn_file::{
+    cert::Certificate,
+    ciphers::{Aes256, RsaPrivate, RsaPublic},
+    header,
+};
 
 fn build_cli() -> Command {
     command!("rsfnfile")
@@ -28,6 +32,70 @@ fn build_cli() -> Command {
                 )
         )
         .subcommand(
+            command!("enc")
+                .about("Criptografa arquivo")
+                .arg(
+                    arg!(<src_cert> "Certificado da origem do arquivo")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(<src_key> "Chave privada da origem do arquivo")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(<dst_cert> "Certificado do destino do arquivo")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!([input] "Arquivo de entrada, se não informado o STDIN será lido")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(-o --output <PATH> "Arquivo de saída, se não informado o STDOUT será escrito")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(verifycert: -c --noverifycert "Não verifica se os certificados são os mesmos do cabeçalho de segurança")
+                        .action(ArgAction::SetFalse)
+                )
+        )
+        .subcommand(
+            command!("dec")
+                .about("Descriptografa arquivo")
+                .arg(
+                    arg!(<src_cert> "Certificado da origem do arquivo")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(<dst_cert> "Certificado do destino do arquivo")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(<dst_key> "Chave privada do destino do arquivo")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!([input] "Arquivo de entrada, se não informado o STDIN será lido")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(-o --output <PATH> "Arquivo de saída, se não informado o STDOUT será escrito")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(verifyheader: -n --noverifyheader "Não verifica se o cabelhaço de segurança tem valores válidos nos campos")
+                        .action(ArgAction::SetFalse)
+                )
+                .arg(
+                    arg!(verifycert: -c --noverifycert "Não verifica se os certificados são os mesmos do cabeçalho de segurança")
+                        .action(ArgAction::SetFalse)
+                )
+                .arg(
+                    arg!(verifysign: -s --noverifysign "Não verifica assinatura do arquivo")
+                        .action(ArgAction::SetFalse)
+                )
+        )
+        .subcommand(
             command!("completion")
                 .about("Gera completion para o shell")
                 .arg(
@@ -44,6 +112,8 @@ fn build_cli() -> Command {
 fn main() {
     let result = match build_cli().get_matches().subcommand() {
         Some(("header", matches)) => dump_header(matches),
+        Some(("enc", matches)) => encrypt_file(matches),
+        Some(("dec", matches)) => decrypt_file(matches),
         Some(("completion", matches)) => generate_completion(matches),
         _ => unreachable!(),
     };
@@ -52,6 +122,35 @@ fn main() {
         eprintln!("ERRO: {error}");
         std::process::exit(1);
     }
+}
+
+fn load_certificate(
+    filepath: &PathBuf,
+) -> Result<(Certificate, header::AsymmetricKeyAlgo, RsaPublic), String> {
+    let content =
+        std::fs::read(filepath).map_err(|error| format!("Falha na leitura do arquivo: {error}"))?;
+    let certificate =
+        Certificate::load(&content).map_err(|error| format!("Certificado inválido: {error}"))?;
+    let key_type = certificate
+        .key_type()
+        .map_err(|error| format!("Falha no tipo da chave do certificado: {error}"))?;
+    let certificate_key = match key_type {
+        header::AsymmetricKeyAlgo::RSA1024 | header::AsymmetricKeyAlgo::RSA2048 => certificate
+            .rsa_pub_key()
+            .map_err(|error| format!("Falha ao carregar chave RSA: {error}"))?,
+        _ => Err(format!(
+            "Sem implementação para chave {}",
+            key_type.describe_value()
+        ))?,
+    };
+    Ok((certificate, key_type, certificate_key))
+}
+
+fn load_key(filepath: &PathBuf) -> Result<RsaPrivate, String> {
+    let content = std::fs::read_to_string(filepath)
+        .map_err(|error| format!("Falha na leitura do arquivo: {error}"))?;
+    let key = RsaPrivate::load_pem(&content).map_err(|error| format!("Chave inválida: {error}"))?;
+    Ok(key)
 }
 
 fn open_input(filepath: Option<&PathBuf>) -> Result<Box<dyn io::Read>, String> {
@@ -91,6 +190,162 @@ fn dump_header(matches: &ArgMatches) -> Result<(), String> {
             .is_valid()
             .map_err(|error| format!("Cabeçalho de segurança inválido\n{error}"))?;
     }
+    Ok(())
+}
+
+fn encrypt_file(matches: &ArgMatches) -> Result<(), String> {
+    let mut input = open_input(matches.get_one("input"))
+        .map_err(|error| format!("Falha na entrada\n{error}"))?;
+    let mut output = open_output(matches.get_one("output"))
+        .map_err(|error| format!("Falha na saída\n{error}"))?;
+
+    let (src_cert, src_key_type, src_cert_key) = load_certificate(
+        matches
+            .get_one("src_cert")
+            .expect("Argumento do certificado da origem faltando"),
+    )
+    .map_err(|error| format!("Falha no certificado da origem\n{error}"))?;
+    let src_key = load_key(
+        matches
+            .get_one("src_key")
+            .expect("Argumento da chave privada da origem faltando"),
+    )
+    .map_err(|error| format!("Falha na chave privada da origem\n{error}"))?;
+    if matches.get_flag("verifycert") && !src_key.check_public_key(&src_cert_key) {
+        Err("Chave privada da origem não coresponde ao seu certificado")?;
+    }
+
+    let (dst_cert, dst_key_type, dst_cert_key) = load_certificate(
+        matches
+            .get_one("dst_cert")
+            .expect("Argumento do certificado do destino faltando"),
+    )
+    .map_err(|error| format!("Falha no certificado do destino\n{error}"))?;
+
+    let mut data = Vec::new();
+    input
+        .read_to_end(&mut data)
+        .map_err(|error| format!("Falha ao ler dados a serem criptografados\n{error}"))?;
+
+    let aes = Aes256::generate_new_key();
+    let cipher_data = aes
+        .encrypt(&data)
+        .map_err(|error| format!("Falha na criptografia do arquivo\n{error}"))?;
+    let cipher_sym_key = dst_cert_key
+        .encrypt(&aes.export_key())
+        .map_err(|error| format!("Falha na criptografia da chave simétrica\n{error}"))?;
+    let sign = src_key.sign(&data);
+
+    let header = header::Header {
+        len: header::HeaderLen::Default,
+        version: header::ProtocolVersion::Version3,
+        error: header::ErrorCode::NoError,
+        special_treatment: header::SpecialTreatment::NotCompress,
+        reserved: header::Reserved::NoValue,
+        dst_key_algo: dst_key_type,
+        sym_key_algo: header::SymmetricKeyAlgo::Aes,
+        src_key_algo: src_key_type,
+        hash_algo: header::HashAlgo::SHA256,
+        dst_pc_cert: dst_cert.issuer(),
+        dst_cert_serial: dst_cert.serial(),
+        src_pc_cert: src_cert.issuer(),
+        src_cert_serial: src_cert.serial(),
+        buffer_sym_key: cipher_sym_key
+            .try_into()
+            .expect("Tamanho da chave simétrica incorreto"),
+        buffer_hash: sign.try_into().expect("Tamanho da assinatura incorreto"),
+    };
+
+    output
+        .write_all(&header.to_bytes())
+        .map_err(|error| format!("Falha ao escrever cabeçalho de segurança\n{error}"))?;
+    output
+        .write_all(&cipher_data)
+        .map_err(|error| format!("Falha ao escrever os dados criptografados\n{error}"))?;
+
+    Ok(())
+}
+
+fn decrypt_file(matches: &ArgMatches) -> Result<(), String> {
+    let mut input = open_input(matches.get_one("input"))
+        .map_err(|error| format!("Falha na entrada\n{error}"))?;
+    let mut output = open_output(matches.get_one("output"))
+        .map_err(|error| format!("Falha na saída\n{error}"))?;
+
+    let (src_cert, src_key_type, src_cert_key) = load_certificate(
+        matches
+            .get_one("src_cert")
+            .expect("Argumento do certificado da origem faltando"),
+    )
+    .map_err(|error| format!("Falha no certificado da origem\n{error}"))?;
+
+    let (dst_cert, dst_key_type, dst_cert_key) = load_certificate(
+        matches
+            .get_one("dst_cert")
+            .expect("Argumento do certificado do destino faltando"),
+    )
+    .map_err(|error| format!("Falha no certificado do destino\n{error}"))?;
+    let dst_key = load_key(
+        matches
+            .get_one("dst_key")
+            .expect("Argumento da chave privada do destino faltando"),
+    )
+    .map_err(|error| format!("Falha na chave privada do destino\n{error}"))?;
+    if matches.get_flag("verifycert") && !dst_key.check_public_key(&dst_cert_key) {
+        Err("Chave privada do destino não coresponde ao seu certificado")?;
+    }
+
+    let header = header::Header::read_from_file(&mut input)
+        .map_err(|error| format!("Falha na leitura do cabelho de segurança\n{error}"))?;
+    if matches.get_flag("verifyheader") {
+        header
+            .is_valid()
+            .map_err(|error| format!("Cabeçalho de segurança inválido\n{error}"))?;
+    }
+    if matches.get_flag("verifycert") {
+        if header.src_cert_serial != src_cert.serial() {
+            Err("Certificado da origem não coincide")?;
+        }
+        if header.src_pc_cert != src_cert.issuer() {
+            Err("Emissor do certificado da origem não coincide")?;
+        }
+        if header.src_key_algo != src_key_type {
+            Err("Tipo da chave do certificado da origem não coincide")?;
+        }
+
+        if header.dst_cert_serial != dst_cert.serial() {
+            Err("Certificado do destino não coincide")?;
+        }
+        if header.dst_pc_cert != dst_cert.issuer() {
+            Err("Emissor do certificado do destino não coincide")?;
+        }
+        if header.dst_key_algo != dst_key_type {
+            Err("Tipo da chave do certificado do destino não coincide")?;
+        }
+    }
+
+    let mut data = Vec::new();
+    input
+        .read_to_end(&mut data)
+        .map_err(|error| format!("Falha ao ler dados a serem descriptografados\n{error}"))?;
+
+    let sym_key = dst_key
+        .decrypt(&header.buffer_sym_key.value())
+        .map_err(|error| format!("Falha ao descriptografar chave simétrica\n{error}"))?;
+    let aes = Aes256::new(&sym_key);
+    let plain_data = aes
+        .decrypt(&data)
+        .map_err(|error| format!("Falha ao descriptografar os dados\n{error}"))?;
+    if matches.get_flag("verifysign") {
+        src_cert_key
+            .verify(&plain_data, &header.buffer_hash.value())
+            .map_err(|error| format!("Assinatura dos dados inválida\n{error}"))?;
+    }
+
+    output
+        .write_all(&plain_data)
+        .map_err(|error| format!("Falha ao escrever os dados descriptografados\n{error}"))?;
+
     Ok(())
 }
 
