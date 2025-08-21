@@ -18,3 +18,4 @@ clap = { version = "4.5", features = ["cargo"] }
 clap_complete = "4.5"
 rand = "0.8"
 rsa = { version = "0.9", features = ["sha2"] }
+x509-certificate = "0.24"
