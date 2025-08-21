@@ -1,7 +1,7 @@
 # Project
 
 PACKAGE_NAME := rsfn-file
-EXECUTABLE_NAME :=
+EXECUTABLE_NAME := rsfnfile
 
 .DEFAULT_GOAL := build
 
