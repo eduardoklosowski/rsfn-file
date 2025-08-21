@@ -1,11 +1,32 @@
 use std::{fs::File, io, path::PathBuf};
 
-use clap::{ArgMatches, Command, arg, command, value_parser};
+use clap::{ArgAction, ArgMatches, Command, arg, command, value_parser};
 use clap_complete::{Shell, generate};
+use rsfn_file::header;
 
 fn build_cli() -> Command {
     command!("rsfnfile")
         .subcommand_required(true)
+        .subcommand(
+            command!("header")
+                .about("Mostra o cabeçalho de segurança do arquivo da RSFN")
+                .arg(
+                    arg!([input] "Arquivo de entrada, se não informado o STDIN será lido")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(-o --output <PATH> "Arquivo de saída, se não informado o STDOUT será escrito")
+                        .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(verbose: -q --quiet "Não imprime o cabeçalho de segurança do arquivo")
+                        .action(ArgAction::SetFalse)
+                )
+                .arg(
+                    arg!(verifyheader: -n --noverifyheader "Não verifica se o cabelhaço de segurança tem valores válidos nos campos")
+                        .action(ArgAction::SetFalse)
+                )
+        )
         .subcommand(
             command!("completion")
                 .about("Gera completion para o shell")
@@ -22,6 +43,7 @@ fn build_cli() -> Command {
 
 fn main() {
     let result = match build_cli().get_matches().subcommand() {
+        Some(("header", matches)) => dump_header(matches),
         Some(("completion", matches)) => generate_completion(matches),
         _ => unreachable!(),
     };
@@ -50,6 +72,26 @@ fn open_output(filepath: Option<&PathBuf>) -> Result<Box<dyn io::Write>, String>
             })?))
         }
     }
+}
+
+fn dump_header(matches: &ArgMatches) -> Result<(), String> {
+    let mut input = open_input(matches.get_one("input"))
+        .map_err(|error| format!("Falha na entrada\n{error}"))?;
+    let mut output = open_output(matches.get_one("output"))
+        .map_err(|error| format!("Falha na saída\n{error}"))?;
+
+    let header = header::Header::read_from_file(&mut input)
+        .map_err(|error| format!("Falha na leitura do cabelho de segurança\n{error}"))?;
+    if matches.get_flag("verbose") {
+        writeln!(output, "{header}")
+            .map_err(|error| format!("Falha ao mostrar cabeçalho de segurança\n{error}"))?;
+    }
+    if matches.get_flag("verifyheader") {
+        header
+            .is_valid()
+            .map_err(|error| format!("Cabeçalho de segurança inválido\n{error}"))?;
+    }
+    Ok(())
 }
 
 fn generate_completion(matches: &ArgMatches) -> Result<(), String> {
