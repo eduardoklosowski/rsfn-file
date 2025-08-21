@@ -1,0 +1,23 @@
+{
+    "name": "rsfn-file",
+
+    "image": "mcr.microsoft.com/devcontainers/rust:2-1-trixie",
+
+    "mounts": [
+        {
+            "type": "volume",
+            "source": "cargo-cache",
+            "target": "/usr/local/cargo"
+        }
+    ],
+
+    "postCreateCommand": "./.devcontainer/setup.sh",
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "editorconfig.editorconfig"
+            ]
+        }
+    }
+}

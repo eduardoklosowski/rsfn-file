@@ -1,0 +1,13 @@
+[package]
+name = "rsfn-file"
+version = "0.0.0"
+description = "Utilitário para arquivos que trafegam na RSFN (Rede do Sistema Financeiro Nacional)"
+authors = ["Eduardo Klosowski <eduardo_klosowski@yahoo.com>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/eduardoklosowski/rsfn-file"
+categories = []
+keywords = []
+edition = "2024"
+rust-version = "1.89"
+publish = false
