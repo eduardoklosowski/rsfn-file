@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup rust
-        run: rustup update 1.88 && rustup default 1.88
+        run: rustup update 1.89 && rustup default 1.89
 
       - name: Setup tools
         run: rustup component add rustfmt clippy
@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup rust
-        run: rustup update 1.88 && rustup default 1.88
+        run: rustup update 1.89 && rustup default 1.89
 
       - name: Run tests
         run: make test

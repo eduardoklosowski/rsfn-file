@@ -84,11 +84,11 @@ fn main() -> io::Result<()> {
             if matches.get_flag("verbose") {
                 writeln!(output, "{header}")?;
             }
-            if matches.get_flag("verifyheader") {
-                if let Err(error) = header.is_header_valid() {
-                    eprintln!("ERRO: Cabeçalho de segurança inválido: {error}");
-                    std::process::exit(1);
-                }
+            if matches.get_flag("verifyheader")
+                && let Err(error) = header.is_header_valid()
+            {
+                eprintln!("ERRO: Cabeçalho de segurança inválido: {error}");
+                std::process::exit(1);
             }
         }
 
