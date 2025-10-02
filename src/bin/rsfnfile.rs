@@ -1,11 +1,16 @@
-use std::{fs::File, io, path::PathBuf};
+use std::{
+    fs::File,
+    io::{self, Read, Write},
+    path::PathBuf,
+};
 
 use clap::{ArgAction, Command, arg, command, value_parser};
 use clap_complete::{Shell, generate};
+use libflate::gzip;
 use rsfn_file::{
     cert::Certificate,
     ciphers::{Aes256, RsaPrivate, RsaPublic},
-    header::{self, AsymmetricKeyAlgo, Header},
+    header::{self, AsymmetricKeyAlgo, Header, SpecialTreatment},
 };
 
 fn build_cli() -> Command {
@@ -43,6 +48,10 @@ fn build_cli() -> Command {
                         .value_parser(value_parser!(PathBuf))
                 )
                 .arg(
+                    arg!(-g --gzip "Compacta arquivo com gzip (RFC 1952)")
+                        .action(ArgAction::SetTrue)
+                )
+                .arg(
                     arg!(<src_cert> "Certificado da origem do arquivo")
                         .value_parser(value_parser!(PathBuf))
                 )
@@ -65,6 +74,10 @@ fn build_cli() -> Command {
                 .arg(
                     arg!(-o --out <PATH> "Arquivo de saída, se não informado o STDOUT será escrito")
                         .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(decompress: -d --nodecompress "Não realiza descompactação dos dados se eles estiverem compactados")
+                        .action(ArgAction::SetFalse)
                 )
                 .arg(
                     arg!(<src_cert> "Certificado da origem do arquivo")
@@ -159,6 +172,28 @@ fn load_key(path: &PathBuf) -> Result<RsaPrivate, String> {
     }
 }
 
+fn encode_gzip(data: &[u8]) -> Result<Vec<u8>, String> {
+    let mut encoder = gzip::Encoder::new(Vec::new())
+        .map_err(|error| format!("Falha ao iniciar o encode do gzip: {error}"))?;
+    encoder
+        .write_all(data)
+        .map_err(|error| format!("Falha na compresão do gzip: {error}"))?;
+    encoder
+        .finish()
+        .into_result()
+        .map_err(|error| format!("Falha na compresão do gzip: {error}"))
+}
+
+fn decode_gzip(data: &[u8]) -> Result<Vec<u8>, String> {
+    let mut decoder = gzip::Decoder::new(data)
+        .map_err(|error| format!("Falha ao iniciar decode do gzip: {error}"))?;
+    let mut text = Vec::new();
+    decoder
+        .read_to_end(&mut text)
+        .map_err(|error| format!("Falha na descompressão do gzip: {error}"))?;
+    Ok(text)
+}
+
 fn main() -> io::Result<()> {
     match build_cli().get_matches().subcommand() {
         Some(("header", matches)) => {
@@ -242,6 +277,16 @@ fn main() -> io::Result<()> {
                 eprintln!("ERRO: Falha ao ler dados a serem criptografados: {error}");
                 std::process::exit(1);
             };
+            let data = match matches.get_flag("gzip") {
+                true => match encode_gzip(&data) {
+                    Ok(data) => data,
+                    Err(error) => {
+                        eprintln!("ERRO: {error}");
+                        std::process::exit(1);
+                    }
+                },
+                false => data,
+            };
 
             let aes = Aes256::generate_new_key();
             let ciphertext = match aes.encrypt(&data) {
@@ -264,7 +309,11 @@ fn main() -> io::Result<()> {
                 len: header::HeaderLen::Default,
                 version: header::ProtocolVersion::Version3,
                 error: header::ErrorCode::NoError,
-                special_treatment: header::SpecialTreatment::NotCompress,
+                special_treatment: if matches.get_flag("gzip") {
+                    header::SpecialTreatment::Compress
+                } else {
+                    header::SpecialTreatment::NotCompress
+                },
                 reserved: header::Reserved::NoValue,
                 dst_key_algo: dst_key_type,
                 sym_key_algo: header::SymmetricKeyAlgo::Aes,
@@ -405,6 +454,21 @@ fn main() -> io::Result<()> {
                 eprintln!("ERRO: Assinatura inválida: {error}");
                 std::process::exit(1);
             }
+
+            let text: Vec<u8> = match header.special_treatment {
+                SpecialTreatment::Compress | SpecialTreatment::ComrpessWithoutCrypt
+                    if matches.get_flag("decompress") =>
+                {
+                    match decode_gzip(&text) {
+                        Ok(text) => text,
+                        Err(error) => {
+                            eprintln!("ERRO: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                _ => text,
+            };
 
             if let Err(error) = output.write_all(&text) {
                 eprintln!("ERRO: Falha ao escrever dados descriptografados: {error}");
