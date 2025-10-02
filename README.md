@@ -1,6 +1,12 @@
-# Utilitário para Arquivos que Trafegam na RSFN (Rede do Sistema Financeiro Nacional)
+# RSFN File
+
+Esse projeto é uma ferramenta para validar e inspecionar arquivos trafegados na RSFN (Rede do Sistema Financeiro Nacional). Por também possibilitar a criptografia e descriptografia de arquivos, ele se torna uma opção para gerar arquivos visando testar sistemas que interagem na RSFN e validar o conteúdo dos arquivos gerados por esses sistemas.
+
+Atualmente essa ferramenta implementa suporte apenas a versão 3 do cabeçalho de segurança (última versão publicada até então) com os algoritmos de criptografia [AES](https://pt.wikipedia.org/wiki/Advanced_Encryption_Standard), [RSA](https://pt.wikipedia.org/wiki/RSA_(sistema_criptogr%C3%A1fico)) e de hash [SHA-256](https://pt.wikipedia.org/wiki/SHA-2). Sua implementação é baseada nas documentações disponibilizadas pelo [Banco Cental do Brasil](https://www.bcb.gov.br/estabilidadefinanceira/comunicacaodados) e [Núclea](https://www2.nuclea.com.br/SitePages/novodocumentos.aspx) para serviços como STR e SLC.
 
 ## Exemplos de Uso
+
+[![Vídeo no asciicast](https://asciinema.org/a/745941.svg)](https://asciinema.org/a/745941)
 
 ### Mostrar e Validar o Cabeçalho de Segurança de um Arquivo
 
@@ -23,4 +29,18 @@ C13 Série do certificado da instituição      : 0x3030303030303030303030303030
 C14 Buffer da chave simétrica                : blob [len=256]
 C15 Buffer da autenticação da mensagem       : blob [len=256]
 ================================ END HEADER ================================
+```
+
+### Criptografa Arquivo
+
+```txt
+$ make certs
+$ echo "Exemplo de teste" | rsfnfile enc data/part-a.crt data/part-a.key data/part-b.crt --gzip -o arquivo
+```
+
+### Descriptografa Arquivo
+
+```txt
+$ rsfnfile dec data/part-a.crt data/part-b.crt data/part-b.key --in arquivo
+Exemplo de teste
 ```
