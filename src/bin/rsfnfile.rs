@@ -64,6 +64,10 @@ fn build_cli() -> Command {
                         .action(ArgAction::SetTrue)
                 )
                 .arg(
+                    arg!(encode: -r --raw "Não realiza a conversão dos dados de UTF-8 para UTF-16BE")
+                        .action(ArgAction::SetFalse)
+                )
+                .arg(
                     arg!(verifycert: -c --noverifycert "Não verifica se os certificados são os mesmos do cabeçalho de segurança")
                         .action(ArgAction::SetFalse)
                 )
@@ -93,6 +97,10 @@ fn build_cli() -> Command {
                 )
                 .arg(
                     arg!(decompress: -d --nodecompress "Não descompacta dados se eles estiverem compactados")
+                        .action(ArgAction::SetFalse)
+                )
+                .arg(
+                    arg!(decode: -r --raw "Não realiza a conversão dos dados de UTF-16BE para UTF-8")
                         .action(ArgAction::SetFalse)
                 )
                 .arg(
@@ -188,6 +196,28 @@ fn decode_gzip(data: &[u8]) -> Result<Vec<u8>, String> {
     Ok(text)
 }
 
+fn encode_utf16be(data: Vec<u8>) -> Result<Vec<u8>, String> {
+    let text = String::from_utf8(data)
+        .map_err(|error| format!("Falha ao ler dados como UTF-8: {error}"))?;
+    Ok(text.encode_utf16().flat_map(u16::to_be_bytes).collect())
+}
+
+fn decode_utf16be(data: Vec<u8>) -> Result<Vec<u8>, String> {
+    let data: Vec<_> = data
+        .chunks_exact(2)
+        .map(|bytes| {
+            u16::from_be_bytes(
+                bytes
+                    .try_into()
+                    .expect("Tamanho de dados inválido para UTF-16BE"),
+            )
+        })
+        .collect();
+    let text = String::from_utf16(&data)
+        .map_err(|error| format!("Falha ao ler dados como UTF-16BE: {error}"))?;
+    Ok(text.bytes().collect())
+}
+
 fn open_input(filepath: Option<&PathBuf>) -> Result<Box<dyn io::Read>, String> {
     match filepath {
         None => Ok(Box::new(io::BufReader::new(io::stdin()))),
@@ -261,6 +291,11 @@ fn encrypt_file(matches: &ArgMatches) -> Result<(), String> {
     input
         .read_to_end(&mut data)
         .map_err(|error| format!("Falha ao ler dados a serem criptografados\n{error}"))?;
+    let data = match matches.get_flag("encode") {
+        true => encode_utf16be(data)
+            .map_err(|error| format!("Falha no encode de UTF-8 para UTF-16\n{error}"))?,
+        false => data,
+    };
     let data = match matches.get_flag("gzip") {
         true => encode_gzip(&data)
             .map_err(|error| format!("Falha na compactação do arquivo\n{error}"))?,
@@ -393,6 +428,11 @@ fn decrypt_file(matches: &ArgMatches) -> Result<(), String> {
                 .map_err(|error| format!("Falha na descompactação do gzip\n{error}"))?
         }
         _ => plain_data,
+    };
+    let plain_data = match matches.get_flag("decompress") && matches.get_flag("decode") {
+        true => decode_utf16be(plain_data)
+            .map_err(|error| format!("Falha no decode do UTF-16BE\n{error}"))?,
+        false => plain_data,
     };
 
     output
