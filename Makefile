@@ -55,9 +55,9 @@ test-cargo:  ## Executa testes do rust
 
 # Clean
 
-.PHONY: clean clean-cargo clean-build
+.PHONY: clean clean-cargo clean-build clean-certs
 
-clean: clean-cargo clean-build  ## Limpa o projeto
+clean: clean-cargo clean-build clean-certs  ## Limpa o projeto
 
 clean-cargo:  ## Remove compilados do cargo
 	cargo clean
@@ -65,10 +65,16 @@ clean-cargo:  ## Remove compilados do cargo
 clean-build:  ## Remove o executável compilado
 	rm -rf dist
 
+clean-certs:  ## Remove certificados gerados para testes
+	cd data && make clean-certs
+
 
 # Misc
 
-.PHONY: help
+.PHONY: certs help
+
+certs:  ## Gera certificados para testes
+	cd data && make certs
 
 help:
 	@awk 'BEGIN {FS = ":.*## "} /^[A-Za-z\$$/].*:.*## / {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
