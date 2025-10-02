@@ -1,7 +1,12 @@
-use std::{fs::File, io, path::PathBuf};
+use std::{
+    fs::File,
+    io::{self, Read, Write},
+    path::PathBuf,
+};
 
 use clap::{ArgAction, ArgMatches, Command, arg, command, value_parser};
 use clap_complete::{Shell, generate};
+use libflate::gzip;
 use rsfn_file::{
     cert::Certificate,
     ciphers::{Aes256, RsaPrivate, RsaPublic},
@@ -55,6 +60,10 @@ fn build_cli() -> Command {
                         .value_parser(value_parser!(PathBuf))
                 )
                 .arg(
+                    arg!(-g --gzip "Compacta arquivo com gzip (RFC 1952)")
+                        .action(ArgAction::SetTrue)
+                )
+                .arg(
                     arg!(verifycert: -c --noverifycert "Não verifica se os certificados são os mesmos do cabeçalho de segurança")
                         .action(ArgAction::SetFalse)
                 )
@@ -81,6 +90,10 @@ fn build_cli() -> Command {
                 .arg(
                     arg!(-o --output <PATH> "Arquivo de saída, se não informado o STDOUT será escrito")
                         .value_parser(value_parser!(PathBuf))
+                )
+                .arg(
+                    arg!(decompress: -d --nodecompress "Não descompacta dados se eles estiverem compactados")
+                        .action(ArgAction::SetFalse)
                 )
                 .arg(
                     arg!(verifyheader: -n --noverifyheader "Não verifica se o cabelhaço de segurança tem valores válidos nos campos")
@@ -151,6 +164,28 @@ fn load_key(filepath: &PathBuf) -> Result<RsaPrivate, String> {
         .map_err(|error| format!("Falha na leitura do arquivo: {error}"))?;
     let key = RsaPrivate::load_pem(&content).map_err(|error| format!("Chave inválida: {error}"))?;
     Ok(key)
+}
+
+fn encode_gzip(data: &[u8]) -> Result<Vec<u8>, String> {
+    let mut encoder = gzip::Encoder::new(Vec::new())
+        .map_err(|error| format!("Falha ao iniciar o gzip: {error}"))?;
+    encoder
+        .write_all(data)
+        .map_err(|error| format!("Falha na compactação do gzip: {error}"))?;
+    encoder
+        .finish()
+        .into_result()
+        .map_err(|error| format!("Falha na finalização do gzip: {error}"))
+}
+
+fn decode_gzip(data: &[u8]) -> Result<Vec<u8>, String> {
+    let mut decoder =
+        gzip::Decoder::new(data).map_err(|error| format!("Falha ao iniciar o gzip: {error}"))?;
+    let mut text = Vec::new();
+    decoder
+        .read_to_end(&mut text)
+        .map_err(|error| format!("Falha na descompactação do gzip: {error}"))?;
+    Ok(text)
 }
 
 fn open_input(filepath: Option<&PathBuf>) -> Result<Box<dyn io::Read>, String> {
@@ -226,6 +261,11 @@ fn encrypt_file(matches: &ArgMatches) -> Result<(), String> {
     input
         .read_to_end(&mut data)
         .map_err(|error| format!("Falha ao ler dados a serem criptografados\n{error}"))?;
+    let data = match matches.get_flag("gzip") {
+        true => encode_gzip(&data)
+            .map_err(|error| format!("Falha na compactação do arquivo\n{error}"))?,
+        false => data,
+    };
 
     let aes = Aes256::generate_new_key();
     let cipher_data = aes
@@ -240,7 +280,10 @@ fn encrypt_file(matches: &ArgMatches) -> Result<(), String> {
         len: header::HeaderLen::Default,
         version: header::ProtocolVersion::Version3,
         error: header::ErrorCode::NoError,
-        special_treatment: header::SpecialTreatment::NotCompress,
+        special_treatment: match matches.get_flag("gzip") {
+            true => header::SpecialTreatment::Compress,
+            false => header::SpecialTreatment::NotCompress,
+        },
         reserved: header::Reserved::NoValue,
         dst_key_algo: dst_key_type,
         sym_key_algo: header::SymmetricKeyAlgo::Aes,
@@ -341,6 +384,16 @@ fn decrypt_file(matches: &ArgMatches) -> Result<(), String> {
             .verify(&plain_data, &header.buffer_hash.value())
             .map_err(|error| format!("Assinatura dos dados inválida\n{error}"))?;
     }
+
+    let plain_data: Vec<u8> = match header.special_treatment {
+        header::SpecialTreatment::Compress | header::SpecialTreatment::ComrpessWithoutCrypt
+            if matches.get_flag("decompress") =>
+        {
+            decode_gzip(&plain_data)
+                .map_err(|error| format!("Falha na descompactação do gzip\n{error}"))?
+        }
+        _ => plain_data,
+    };
 
     output
         .write_all(&plain_data)
