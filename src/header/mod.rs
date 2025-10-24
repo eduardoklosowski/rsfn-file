@@ -1,8 +1,8 @@
 use std::{fmt, io};
 
 pub use self::fields::{
-    AsymmetricKeyAlgo, Buffer, CertSerial, ErrorCode, HashAlgo, HeaderLen, PcCert, ProtocolVersion,
-    Reserved, SpecialTreatment, SymmetricKeyAlgo,
+    AsymmetricKeyAlgo, Buffer, CertSerial, ErrorCode, HashAlgo, HeaderLen, NullableBuffer, PcCert,
+    ProtocolVersion, Reserved, SpecialTreatment, SymmetricKeyAlgo,
 };
 
 mod fields;
@@ -37,7 +37,7 @@ pub struct Header {
     /// C13 Série do certificado digital da Instituição.
     pub src_cert_serial: CertSerial,
     /// C14 Buffer de criptografia da chave simétrica.
-    pub buffer_sym_key: Buffer,
+    pub buffer_sym_key: NullableBuffer,
     /// C15 Buffer do criptograma de autenticação.
     pub buffer_hash: Buffer,
 }
@@ -293,7 +293,7 @@ C10 PC do certificado do destino             : 0x00 [DESCONHECIDO]
 C11 Série do certificado do destino          : 0x0000000000000000000000000000000000000000000000000000000000000000 [INVÁLIDO]
 C12 PC do certificado da instituição         : 0x00 [DESCONHECIDO]
 C13 Série do certificado da instituição      : 0x0000000000000000000000000000000000000000000000000000000000000000 [INVÁLIDO]
-C14 Buffer da chave simétrica                : blob [len=0]
+C14 Buffer da chave simétrica                : VAZIO
 C15 Buffer da autenticação da mensagem       : blob [len=0]
 ================================ END HEADER ================================");
     }
@@ -314,8 +314,8 @@ C15 Buffer da autenticação da mensagem       : blob [len=0]
             dst_cert_serial: [0; 32].into(),
             src_pc_cert: PcCert::PessoasFisicas,
             src_cert_serial: [0; 32].into(),
-            buffer_sym_key: [0; 256].into(),
-            buffer_hash: [0; 256].into(),
+            buffer_sym_key: [1; 256].into(),
+            buffer_hash: [1; 256].into(),
         };
 
         assert_eq!(sut.to_string(), "================================ BEGIN HEADER ================================
@@ -332,8 +332,8 @@ C10 PC do certificado do destino             : 0x03 [Pessoas Físicas]
 C11 Série do certificado do destino          : 0x0000000000000000000000000000000000000000000000000000000000000000 [INVÁLIDO]
 C12 PC do certificado da instituição         : 0x03 [Pessoas Físicas]
 C13 Série do certificado da instituição      : 0x0000000000000000000000000000000000000000000000000000000000000000 [INVÁLIDO]
-C14 Buffer da chave simétrica                : blob [len=0]
-C15 Buffer da autenticação da mensagem       : blob [len=0]
+C14 Buffer da chave simétrica                : blob [len=256]
+C15 Buffer da autenticação da mensagem       : blob [len=256]
 ================================ END HEADER ================================");
     }
 
@@ -637,29 +637,6 @@ C15 Buffer da autenticação da mensagem       : blob [len=0]
     }
 
     #[test]
-    fn value_invalid_buffer_sym_key() {
-        let sut = Header {
-            len: HeaderLen::Default,
-            version: ProtocolVersion::Version3,
-            error: ErrorCode::NoError,
-            special_treatment: SpecialTreatment::Normal,
-            reserved: Reserved::NoValue,
-            dst_key_algo: AsymmetricKeyAlgo::RSA2048,
-            sym_key_algo: SymmetricKeyAlgo::Aes,
-            src_key_algo: AsymmetricKeyAlgo::RSA2048,
-            hash_algo: HashAlgo::SHA256,
-            dst_pc_cert: PcCert::PessoasFisicas,
-            dst_cert_serial: [b'1'; 32].into(),
-            src_pc_cert: PcCert::PessoasFisicas,
-            src_cert_serial: [b'1'; 32].into(),
-            buffer_sym_key: [0; 256].into(),
-            buffer_hash: [1; 256].into(),
-        };
-
-        assert_eq!(sut.is_valid().unwrap_err(), "C14 inválido");
-    }
-
-    #[test]
     fn value_invalid_buffer_hash() {
         let sut = Header {
             len: HeaderLen::Default,
@@ -705,6 +682,7 @@ C15 Buffer da autenticação da mensagem       : blob [len=0]
         assert_eq!(
             sut.is_valid().unwrap_err(),
             (1..=15)
+                .filter(|&i| i != 14)
                 .map(|i| format!("C{i:02} inválido"))
                 .collect::<Vec<_>>()
                 .join(", ")
