@@ -16,7 +16,7 @@ publish = false
 aes-gcm = "0.10"
 clap = { version = "4.5", features = ["cargo"] }
 clap_complete = "4.5"
-libflate = "2.1"
+libflate = "2.2"
 rsa = { version = "0.9", features = ["sha2"] }
 x509-certificate = "0.25"
 
