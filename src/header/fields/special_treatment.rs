@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{ffi::OsStr, fmt};
 
 /// Indicador de tratamento especial.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +33,23 @@ impl From<u8> for SpecialTreatment {
             10 => Self::ComrpessWithoutCrypt,
             n => Self::Unknown(n),
         }
+    }
+}
+
+impl From<&OsStr> for SpecialTreatment {
+    fn from(value: &OsStr) -> Self {
+        let value = value.to_string_lossy();
+        if let Some(value) = value.strip_prefix("0x") {
+            u8::from_str_radix(value, 16)
+        } else if let Some(value) = value.strip_prefix("0b") {
+            u8::from_str_radix(value, 2)
+        } else if let Some(value) = value.strip_prefix("0") {
+            u8::from_str_radix(value, 8)
+        } else {
+            value.parse()
+        }
+        .unwrap_or(0xff)
+        .into()
     }
 }
 

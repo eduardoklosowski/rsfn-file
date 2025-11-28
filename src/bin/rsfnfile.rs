@@ -60,6 +60,14 @@ fn build_cli() -> Command {
                         .value_parser(value_parser!(PathBuf))
                 )
                 .arg(
+                    arg!(specialtreatment: --specialtreatment <VALUE> "Valor para o campo de tratamento especial (C04)")
+                        .value_parser(value_parser!(header::SpecialTreatment))
+                )
+                .arg(
+                    arg!(crypt: -p --plain "Não criptografa os dados")
+                        .action(ArgAction::SetFalse)
+                )
+                .arg(
                     arg!(-g --gzip "Compacta arquivo com gzip (RFC 1952)")
                         .action(ArgAction::SetTrue)
                 )
@@ -302,23 +310,33 @@ fn encrypt_file(matches: &ArgMatches) -> Result<(), String> {
         false => data,
     };
 
-    let aes = Aes256::generate_new_key();
-    let cipher_data = aes
-        .encrypt(&data)
-        .map_err(|error| format!("Falha na criptografia do arquivo\n{error}"))?;
-    let cipher_sym_key = dst_cert_key
-        .encrypt(&aes.export_key())
-        .map_err(|error| format!("Falha na criptografia da chave simétrica\n{error}"))?;
+    let (cipher_sym_key, cipher_data) = if matches.get_flag("crypt") {
+        let aes = Aes256::generate_new_key();
+        let cipher_data = aes
+            .encrypt(&data)
+            .map_err(|error| format!("Falha na criptografia do arquivo\n{error}"))?;
+        let cipher_sym_key = dst_cert_key
+            .encrypt(&aes.export_key())
+            .map_err(|error| format!("Falha na criptografia da chave simétrica\n{error}"))?;
+        (cipher_sym_key, cipher_data)
+    } else {
+        (Vec::from([0; 256]), data.clone())
+    };
     let sign = src_key.sign(&data);
+
+    let special_treatment = match matches.get_one::<header::SpecialTreatment>("specialtreatment") {
+        Some(value) => value.clone(),
+        None => match matches.get_flag("gzip") {
+            true => header::SpecialTreatment::Compress,
+            false => header::SpecialTreatment::NotCompress,
+        },
+    };
 
     let header = header::Header {
         len: header::HeaderLen::Default,
         version: header::ProtocolVersion::Version3,
         error: header::ErrorCode::NoError,
-        special_treatment: match matches.get_flag("gzip") {
-            true => header::SpecialTreatment::Compress,
-            false => header::SpecialTreatment::NotCompress,
-        },
+        special_treatment,
         reserved: header::Reserved::NoValue,
         dst_key_algo: dst_key_type,
         sym_key_algo: header::SymmetricKeyAlgo::Aes,
@@ -407,13 +425,17 @@ fn decrypt_file(matches: &ArgMatches) -> Result<(), String> {
         .read_to_end(&mut data)
         .map_err(|error| format!("Falha ao ler dados a serem descriptografados\n{error}"))?;
 
-    let sym_key = dst_key
-        .decrypt(&header.buffer_sym_key.value())
-        .map_err(|error| format!("Falha ao descriptografar chave simétrica\n{error}"))?;
-    let aes = Aes256::new(&sym_key);
-    let plain_data = aes
-        .decrypt(&data)
-        .map_err(|error| format!("Falha ao descriptografar os dados\n{error}"))?;
+    let buffer_sym_key = header.buffer_sym_key.value();
+    let plain_data = if buffer_sym_key.iter().any(|&byte| byte != 0) {
+        let sym_key = dst_key
+            .decrypt(&buffer_sym_key)
+            .map_err(|error| format!("Falha ao descriptografar chave simétrica\n{error}"))?;
+        let aes = Aes256::new(&sym_key);
+        aes.decrypt(&data)
+            .map_err(|error| format!("Falha ao descriptografar os dados\n{error}"))?
+    } else {
+        data
+    };
     if matches.get_flag("verifysign") {
         src_cert_key
             .verify(&plain_data, &header.buffer_hash.value())
