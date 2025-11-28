@@ -1,6 +1,6 @@
 [package]
 name = "rsfn-file"
-version = "0.0.0"
+version = "0.2.0"
 description = "Utilitário para arquivos que trafegam na RSFN (Rede do Sistema Financeiro Nacional)"
 authors = ["Eduardo Klosowski <eduardo_klosowski@yahoo.com>"]
 license = "MIT"
@@ -10,7 +10,6 @@ categories = []
 keywords = []
 edition = "2024"
 rust-version = "1.89"
-publish = false
 
 [dependencies]
 aes-gcm = "0.10"
