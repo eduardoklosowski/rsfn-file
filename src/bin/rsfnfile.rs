@@ -10,6 +10,7 @@ use rsfn_file::{
     cert::Certificate,
     ciphers::{Aes256, RsaPrivate, RsaPublic},
     compress::Compressors,
+    encode::Encoders,
     header,
 };
 
@@ -182,28 +183,6 @@ fn load_key(filepath: &PathBuf) -> Result<RsaPrivate, String> {
     Ok(key)
 }
 
-fn encode_utf16be(data: Vec<u8>) -> Result<Vec<u8>, String> {
-    let text = String::from_utf8(data)
-        .map_err(|error| format!("Falha ao ler dados como UTF-8: {error}"))?;
-    Ok(text.encode_utf16().flat_map(u16::to_be_bytes).collect())
-}
-
-fn decode_utf16be(data: Vec<u8>) -> Result<Vec<u8>, String> {
-    let data: Vec<_> = data
-        .chunks_exact(2)
-        .map(|bytes| {
-            u16::from_be_bytes(
-                bytes
-                    .try_into()
-                    .expect("Tamanho de dados inválido para UTF-16BE"),
-            )
-        })
-        .collect();
-    let text = String::from_utf16(&data)
-        .map_err(|error| format!("Falha ao ler dados como UTF-16BE: {error}"))?;
-    Ok(text.bytes().collect())
-}
-
 fn open_input(filepath: Option<&PathBuf>) -> Result<Box<dyn io::Read>, String> {
     match filepath {
         None => Ok(Box::new(io::BufReader::new(io::stdin()))),
@@ -277,11 +256,14 @@ fn encrypt_file(matches: &ArgMatches) -> Result<(), String> {
     input
         .read_to_end(&mut data)
         .map_err(|error| format!("Falha ao ler dados a serem criptografados\n{error}"))?;
-    let data = match matches.get_flag("encode") {
-        true => encode_utf16be(data)
-            .map_err(|error| format!("Falha no encode de UTF-8 para UTF-16\n{error}"))?,
-        false => data,
+    let encoder = match matches.get_flag("encode") {
+        true => Encoders::default(),
+        false => Encoders::Plain,
     };
+    let data = encoder
+        .init()
+        .encode(&data)
+        .map_err(|error| format!("Falha no encode dos dados UTF-8\n{error}"))?;
     let compressor = match matches.get_flag("gzip") {
         true => Compressors::Gzip,
         false => Compressors::Plain,
@@ -432,9 +414,15 @@ fn decrypt_file(matches: &ArgMatches) -> Result<(), String> {
         }
         _ => plain_data,
     };
-    let plain_data = match matches.get_flag("decompress") && matches.get_flag("decode") {
-        true => decode_utf16be(plain_data)
-            .map_err(|error| format!("Falha no decode do UTF-16BE\n{error}"))?,
+    let decoder = match matches.get_flag("decode") {
+        true => Encoders::default(),
+        false => Encoders::Plain,
+    };
+    let plain_data = match matches.get_flag("decompress") {
+        true => decoder
+            .init()
+            .decode(&plain_data)
+            .map_err(|error| format!("Falha no decode dos dados\n{error}"))?,
         false => plain_data,
     };
 
