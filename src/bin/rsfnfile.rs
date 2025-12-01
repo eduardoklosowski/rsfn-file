@@ -7,8 +7,8 @@ use std::{
 use clap::{ArgAction, ArgMatches, Command, arg, command, value_parser};
 use clap_complete::{Shell, generate};
 use rsfn_file::{
-    cert::Certificate,
-    ciphers::{Aes256, RsaPrivate, RsaPublic},
+    cert::load_cert_and_key,
+    ciphers::{Aes256, load_key},
     compress::Compressors,
     encode::Encoders,
     header,
@@ -154,33 +154,11 @@ fn main() {
     }
 }
 
-fn load_certificate(
-    filepath: &PathBuf,
-) -> Result<(Certificate, header::AsymmetricKeyAlgo, RsaPublic), String> {
-    let content =
-        std::fs::read(filepath).map_err(|error| format!("Falha na leitura do arquivo: {error}"))?;
-    let certificate =
-        Certificate::load(&content).map_err(|error| format!("Certificado inválido: {error}"))?;
-    let key_type = certificate
-        .key_type()
-        .map_err(|error| format!("Falha no tipo da chave do certificado: {error}"))?;
-    let certificate_key = match key_type {
-        header::AsymmetricKeyAlgo::RSA1024 | header::AsymmetricKeyAlgo::RSA2048 => certificate
-            .rsa_pub_key()
-            .map_err(|error| format!("Falha ao carregar chave RSA: {error}"))?,
-        _ => Err(format!(
-            "Sem implementação para chave {}",
-            key_type.describe_value()
-        ))?,
-    };
-    Ok((certificate, key_type, certificate_key))
-}
-
-fn load_key(filepath: &PathBuf) -> Result<RsaPrivate, String> {
-    let content = std::fs::read_to_string(filepath)
-        .map_err(|error| format!("Falha na leitura do arquivo: {error}"))?;
-    let key = RsaPrivate::load_pem(&content).map_err(|error| format!("Chave inválida: {error}"))?;
-    Ok(key)
+fn load_file(filepath: &PathBuf) -> Result<Vec<u8>, String> {
+    std::fs::read(filepath).map_err(|error| {
+        let filepath = filepath.to_str().unwrap_or("[caracteres inválidos]");
+        format!("Falha na leitura do arquivo {filepath}: {error}")
+    })
 }
 
 fn open_input(filepath: Option<&PathBuf>) -> Result<Box<dyn io::Read>, String> {
@@ -229,28 +207,31 @@ fn encrypt_file(matches: &ArgMatches) -> Result<(), String> {
     let mut output = open_output(matches.get_one("output"))
         .map_err(|error| format!("Falha na saída\n{error}"))?;
 
-    let (src_cert, src_key_type, src_cert_key) = load_certificate(
+    let src_cert = load_file(
         matches
             .get_one("src_cert")
             .expect("Argumento do certificado da origem faltando"),
-    )
-    .map_err(|error| format!("Falha no certificado da origem\n{error}"))?;
-    let src_key = load_key(
+    )?;
+    let (src_cert, src_key_type, src_cert_key) = load_cert_and_key(&src_cert)
+        .map_err(|error| format!("Falha no certificado da origem\n{error}"))?;
+    let src_key = load_file(
         matches
             .get_one("src_key")
             .expect("Argumento da chave privada da origem faltando"),
-    )
-    .map_err(|error| format!("Falha na chave privada da origem\n{error}"))?;
+    )?;
+    let src_key =
+        load_key(&src_key).map_err(|error| format!("Falha na chave privada da origem\n{error}"))?;
     if matches.get_flag("verifycert") && !src_key.check_public_key(&src_cert_key) {
         Err("Chave privada da origem não coresponde ao seu certificado")?;
     }
 
-    let (dst_cert, dst_key_type, dst_cert_key) = load_certificate(
+    let dst_cert = load_file(
         matches
             .get_one("dst_cert")
             .expect("Argumento do certificado do destino faltando"),
-    )
-    .map_err(|error| format!("Falha no certificado do destino\n{error}"))?;
+    )?;
+    let (dst_cert, dst_key_type, dst_cert_key) = load_cert_and_key(&dst_cert)
+        .map_err(|error| format!("Falha no certificado do destino\n{error}"))?;
 
     let mut data = Vec::new();
     input
@@ -331,25 +312,28 @@ fn decrypt_file(matches: &ArgMatches) -> Result<(), String> {
     let mut output = open_output(matches.get_one("output"))
         .map_err(|error| format!("Falha na saída\n{error}"))?;
 
-    let (src_cert, src_key_type, src_cert_key) = load_certificate(
+    let src_cert = load_file(
         matches
             .get_one("src_cert")
             .expect("Argumento do certificado da origem faltando"),
-    )
-    .map_err(|error| format!("Falha no certificado da origem\n{error}"))?;
+    )?;
+    let (src_cert, src_key_type, src_cert_key) = load_cert_and_key(&src_cert)
+        .map_err(|error| format!("Falha no certificado da origem\n{error}"))?;
 
-    let (dst_cert, dst_key_type, dst_cert_key) = load_certificate(
+    let dst_cert = load_file(
         matches
             .get_one("dst_cert")
             .expect("Argumento do certificado do destino faltando"),
-    )
-    .map_err(|error| format!("Falha no certificado do destino\n{error}"))?;
-    let dst_key = load_key(
+    )?;
+    let (dst_cert, dst_key_type, dst_cert_key) = load_cert_and_key(&dst_cert)
+        .map_err(|error| format!("Falha no certificado do destino\n{error}"))?;
+    let dst_key = load_file(
         matches
             .get_one("dst_key")
             .expect("Argumento da chave privada do destino faltando"),
-    )
-    .map_err(|error| format!("Falha na chave privada do destino\n{error}"))?;
+    )?;
+    let dst_key = load_key(&dst_key)
+        .map_err(|error| format!("Falha na chave privada do destino\n{error}"))?;
     if matches.get_flag("verifycert") && !dst_key.check_public_key(&dst_cert_key) {
         Err("Chave privada do destino não coresponde ao seu certificado")?;
     }
