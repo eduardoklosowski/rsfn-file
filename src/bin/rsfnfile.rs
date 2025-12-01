@@ -6,10 +6,10 @@ use std::{
 
 use clap::{ArgAction, ArgMatches, Command, arg, command, value_parser};
 use clap_complete::{Shell, generate};
-use libflate::gzip;
 use rsfn_file::{
     cert::Certificate,
     ciphers::{Aes256, RsaPrivate, RsaPublic},
+    compress::Compressors,
     header,
 };
 
@@ -182,28 +182,6 @@ fn load_key(filepath: &PathBuf) -> Result<RsaPrivate, String> {
     Ok(key)
 }
 
-fn encode_gzip(data: &[u8]) -> Result<Vec<u8>, String> {
-    let mut encoder = gzip::Encoder::new(Vec::new())
-        .map_err(|error| format!("Falha ao iniciar o gzip: {error}"))?;
-    encoder
-        .write_all(data)
-        .map_err(|error| format!("Falha na compactação do gzip: {error}"))?;
-    encoder
-        .finish()
-        .into_result()
-        .map_err(|error| format!("Falha na finalização do gzip: {error}"))
-}
-
-fn decode_gzip(data: &[u8]) -> Result<Vec<u8>, String> {
-    let mut decoder =
-        gzip::Decoder::new(data).map_err(|error| format!("Falha ao iniciar o gzip: {error}"))?;
-    let mut text = Vec::new();
-    decoder
-        .read_to_end(&mut text)
-        .map_err(|error| format!("Falha na descompactação do gzip: {error}"))?;
-    Ok(text)
-}
-
 fn encode_utf16be(data: Vec<u8>) -> Result<Vec<u8>, String> {
     let text = String::from_utf8(data)
         .map_err(|error| format!("Falha ao ler dados como UTF-8: {error}"))?;
@@ -304,11 +282,14 @@ fn encrypt_file(matches: &ArgMatches) -> Result<(), String> {
             .map_err(|error| format!("Falha no encode de UTF-8 para UTF-16\n{error}"))?,
         false => data,
     };
-    let data = match matches.get_flag("gzip") {
-        true => encode_gzip(&data)
-            .map_err(|error| format!("Falha na compactação do arquivo\n{error}"))?,
-        false => data,
+    let compressor = match matches.get_flag("gzip") {
+        true => Compressors::Gzip,
+        false => Compressors::Plain,
     };
+    let data = compressor
+        .init()
+        .compress(&data)
+        .map_err(|error| format!("Falha na compactação do arquivo\n{error}"))?;
 
     let (cipher_sym_key, cipher_data) = if matches.get_flag("crypt") {
         let aes = Aes256::generate_new_key();
@@ -326,9 +307,9 @@ fn encrypt_file(matches: &ArgMatches) -> Result<(), String> {
 
     let special_treatment = match matches.get_one::<header::SpecialTreatment>("specialtreatment") {
         Some(value) => value.clone(),
-        None => match matches.get_flag("gzip") {
-            true => header::SpecialTreatment::Compress,
-            false => header::SpecialTreatment::NotCompress,
+        None => match compressor {
+            Compressors::Plain => header::SpecialTreatment::NotCompress,
+            _ => header::SpecialTreatment::Compress,
         },
     };
 
@@ -446,7 +427,7 @@ fn decrypt_file(matches: &ArgMatches) -> Result<(), String> {
         header::SpecialTreatment::Compress | header::SpecialTreatment::CompressWithoutCrypt
             if matches.get_flag("decompress") =>
         {
-            decode_gzip(&plain_data)
+            Compressors::try_decompress(&plain_data)
                 .map_err(|error| format!("Falha na descompactação do gzip\n{error}"))?
         }
         _ => plain_data,
