@@ -24,6 +24,7 @@ pub enum ErrorCode {
     ErrorOnSoftware,
     InvalidSpecificUse,
     NotEnabledCert,
+    NotSecurityError,
     Unknown(u8),
 }
 
@@ -57,6 +58,7 @@ impl From<u8> for ErrorCode {
             0x12 => Self::ErrorOnSoftware,
             0x13 => Self::InvalidSpecificUse,
             0x14 => Self::NotEnabledCert,
+            0xff => Self::NotSecurityError,
             n => Self::Unknown(n),
         }
     }
@@ -86,6 +88,7 @@ impl ErrorCode {
             Self::ErrorOnSoftware => 0x12,
             Self::InvalidSpecificUse => 0x13,
             Self::NotEnabledCert => 0x14,
+            Self::NotSecurityError => 0xff,
             Self::Unknown(n) => *n,
         }
     }
@@ -113,6 +116,7 @@ impl ErrorCode {
             Self::ErrorOnSoftware => "Erro genérico de software da camada de segurança".to_string(),
             Self::InvalidSpecificUse => "Indicação de uso específico inválida ou incompatível".to_string(),
             Self::NotEnabledCert => "Certificado inválido (Usar certificado \"a ativar\" na GEN0006)".to_string(),
+            Self::NotSecurityError => "Erro fora do escopo de segurança".to_string(),
             Self::Unknown(_) => "DESCONHECIDO".to_string(),
         }
     }
@@ -508,6 +512,19 @@ mod tests {
             sut.to_string(),
             "0x14 [Certificado inválido (Usar certificado \"a ativar\" na GEN0006)]"
         );
+    }
+
+    #[test]
+    fn value_not_security_error() {
+        let sut: ErrorCode = [0xff].into();
+
+        assert_eq!(sut, ErrorCode::NotSecurityError);
+        assert_eq!(sut, 0xff.into());
+        assert_eq!(sut.value(), 0xff);
+        assert_eq!(sut.describe_value(), "Erro fora do escopo de segurança");
+        assert!(sut.is_valid());
+        assert_eq!(sut.to_bytes(), [0xff]);
+        assert_eq!(sut.to_string(), "0xff [Erro fora do escopo de segurança]");
     }
 
     #[test]
