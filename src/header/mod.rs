@@ -132,6 +132,13 @@ impl Header {
         }
     }
 
+    pub fn is_compressed_content(&self) -> bool {
+        matches!(
+            self.special_treatment,
+            SpecialTreatment::Compress | SpecialTreatment::CompressWithoutCrypt
+        )
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut data = Vec::new();
         self.len.to_bytes().iter().for_each(|&byte| data.push(byte));
@@ -729,6 +736,36 @@ C15 Buffer da autenticação da mensagem       : blob [len=256]
             };
 
             assert_eq!(header.is_encrypted_content(), is_encrypted);
+        }
+    }
+
+    #[test]
+    fn is_compessed_content() {
+        let tests = [
+            (SpecialTreatment::Normal, false),
+            (SpecialTreatment::Compress, true),
+            (SpecialTreatment::CompressWithoutCrypt, true),
+        ];
+        for (special_treatment, is_compressed) in tests {
+            let header = Header {
+                len: HeaderLen::Default,
+                version: ProtocolVersion::Version3,
+                error: ErrorCode::NoError,
+                special_treatment,
+                reserved: Reserved::NoValue,
+                dst_key_algo: AsymmetricKeyAlgo::RSA2048,
+                sym_key_algo: SymmetricKeyAlgo::Aes,
+                src_key_algo: AsymmetricKeyAlgo::RSA2048,
+                hash_algo: HashAlgo::SHA256,
+                dst_pc_cert: PcCert::PessoasFisicas,
+                dst_cert_serial: [0; 32].into(),
+                src_pc_cert: PcCert::PessoasFisicas,
+                src_cert_serial: [0; 32].into(),
+                buffer_sym_key: [0; 256].into(),
+                buffer_hash: [0; 256].into(),
+            };
+
+            assert_eq!(header.is_compressed_content(), is_compressed);
         }
     }
 
