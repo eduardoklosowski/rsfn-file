@@ -10,7 +10,7 @@ pub enum SpecialTreatment {
     NotCompress,
     NotCompressAndNotCrypt,
     Compress,
-    ComrpessWithoutCrypt,
+    CompressWithoutCrypt,
     Unknown(u8),
 }
 
@@ -30,7 +30,7 @@ impl From<u8> for SpecialTreatment {
             4 => Self::NotCompress,
             6 => Self::NotCompressAndNotCrypt,
             8 => Self::Compress,
-            10 => Self::ComrpessWithoutCrypt,
+            10 => Self::CompressWithoutCrypt,
             n => Self::Unknown(n),
         }
     }
@@ -63,7 +63,7 @@ impl SpecialTreatment {
             Self::NotCompress => 4,
             Self::NotCompressAndNotCrypt => 6,
             Self::Compress => 8,
-            Self::ComrpessWithoutCrypt => 10,
+            Self::CompressWithoutCrypt => 10,
             Self::Unknown(n) => *n,
         }
     }
@@ -79,7 +79,7 @@ impl SpecialTreatment {
             Self::NotCompress => "Arquivo não compactado".to_string(),
             Self::NotCompressAndNotCrypt => "Arquivo não compactado e sem cifragem".to_string(),
             Self::Compress => "Arquivo compactado".to_string(),
-            Self::ComrpessWithoutCrypt => "Arquivo compactado sem cifragem".to_string(),
+            Self::CompressWithoutCrypt => "Arquivo compactado sem cifragem".to_string(),
             Self::Unknown(_) => "DESCONHECIDO".to_string(),
         }
     }
@@ -224,7 +224,7 @@ mod tests {
     fn value_compress_without_crypt() {
         let sut: SpecialTreatment = [10].into();
 
-        assert_eq!(sut, SpecialTreatment::ComrpessWithoutCrypt);
+        assert_eq!(sut, SpecialTreatment::CompressWithoutCrypt);
         assert_eq!(sut, 10.into());
         assert_eq!(sut.value(), 10);
         assert_eq!(sut.describe_value(), "Arquivo compactado sem cifragem");

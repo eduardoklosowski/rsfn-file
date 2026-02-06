@@ -443,7 +443,7 @@ fn decrypt_file(matches: &ArgMatches) -> Result<(), String> {
     }
 
     let plain_data: Vec<u8> = match header.special_treatment {
-        header::SpecialTreatment::Compress | header::SpecialTreatment::ComrpessWithoutCrypt
+        header::SpecialTreatment::Compress | header::SpecialTreatment::CompressWithoutCrypt
             if matches.get_flag("decompress") =>
         {
             decode_gzip(&plain_data)
