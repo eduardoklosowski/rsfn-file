@@ -21,4 +21,4 @@ rsa = { version = "0.9", features = ["sha2"] }
 x509-certificate = "0.25"
 
 [dev-dependencies]
-rand = "0.9"
+rand = "0.10"
