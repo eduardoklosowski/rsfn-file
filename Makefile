@@ -37,7 +37,7 @@ lint-cargo-fmt:  ## Verifica se o código está formatado
 	cargo fmt --all --check
 
 lint-cargo-check:  ## Verifica se não existe nenhum erro do rust
-	cargo check --locked --all-targets
+	RUSTFLAGS='-D warnings' cargo check --locked --all-targets
 
 lint-clippy:  ## Verifica erros comuns e melhorias no código rust
 	cargo clippy --locked --all-targets -- -Dwarnings
