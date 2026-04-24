@@ -1,5 +1,6 @@
 pub mod gzip;
 pub mod plain;
+pub mod zip;
 
 /// Algoritmo de compressão e descompressão.
 pub trait Compress {
@@ -16,6 +17,7 @@ pub enum Compressors {
     #[default]
     Plain,
     Gzip,
+    Zip,
 }
 
 impl Compressors {
@@ -23,14 +25,18 @@ impl Compressors {
         match self {
             Self::Plain => Box::new(plain::Plain::default()),
             Self::Gzip => Box::new(gzip::Gzip::default()),
+            Self::Zip => Box::new(zip::Zip::default()),
         }
     }
 
     pub fn try_decompress(data: &[u8]) -> Result<Vec<u8>, String> {
-        if let Ok(plain) = Self::Gzip.init().decompress(data) {
-            Ok(plain)
-        } else {
-            Self::Plain.init().decompress(data)
+        if let Ok(plain) = Self::Zip.init().decompress(data) {
+            return Ok(plain);
         }
+        if let Ok(plain) = Self::Gzip.init().decompress(data) {
+            return Ok(plain);
+        }
+
+        Self::Plain.init().decompress(data)
     }
 }
