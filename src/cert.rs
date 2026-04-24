@@ -74,6 +74,26 @@ impl Certificate {
     }
 }
 
+pub fn load_cert_and_key(
+    data: &[u8],
+) -> Result<(Certificate, AsymmetricKeyAlgo, RsaPublic), String> {
+    let certificate =
+        Certificate::load(data).map_err(|error| format!("Certificado inválido: {error}"))?;
+    let key_type = certificate
+        .key_type()
+        .map_err(|error| format!("Falha no tipo da chave do certificado: {error}"))?;
+    let certificate_key = match key_type {
+        AsymmetricKeyAlgo::RSA1024 | AsymmetricKeyAlgo::RSA2048 => certificate
+            .rsa_pub_key()
+            .map_err(|error| format!("Falha ao carregar chave RSA: {error}"))?,
+        _ => Err(format!(
+            "Sem implementação para chave {}",
+            key_type.describe_value()
+        ))?,
+    };
+    Ok((certificate, key_type, certificate_key))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
