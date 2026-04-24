@@ -66,6 +66,10 @@ fn build_cli() -> Command {
                         .action(ArgAction::SetFalse)
                 )
                 .arg(
+                    arg!(-z --zip "Compacta arquivo com zip")
+                        .action(ArgAction::SetTrue)
+                )
+                .arg(
                     arg!(-g --gzip "Compacta arquivo com gzip (RFC 1952)")
                         .action(ArgAction::SetTrue)
                 )
@@ -362,9 +366,10 @@ fn encrypt_file(matches: &ArgMatches) -> Result<(), String> {
             .cloned(),
     );
     encrypter.set_crypt(matches.get_flag("crypt"));
-    encrypter.set_compressor(match matches.get_flag("gzip") {
-        true => Compressors::Gzip,
-        false => Compressors::Plain,
+    encrypter.set_compressor(match (matches.get_flag("zip"), matches.get_flag("gzip")) {
+        (true, _) => Compressors::Zip,
+        (false, true) => Compressors::Gzip,
+        (false, false) => Compressors::Plain,
     });
     encrypter.set_encoder(match matches.get_flag("encode") {
         true => Encoders::default(),
