@@ -14,12 +14,12 @@ publish = false
 
 [dependencies]
 aes-gcm = "0.10"
-clap = { version = "4.5", features = ["cargo"] }
-clap_complete = "4.5"
-libflate = "2.2"
+clap = { version = "4.6", features = ["cargo"] }
+clap_complete = "4.6"
+libflate = "2.3"
 rsa = { version = "0.9", features = ["sha2"] }
 x509-certificate = "0.25"
-zip = { version = "8.5", default-features = false, features = ["deflate"] }
+zip = { version = "8.6", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
-rand = "0.9"
+rand = "0.10"

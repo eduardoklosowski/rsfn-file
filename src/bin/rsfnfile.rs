@@ -634,7 +634,7 @@ fn generate_completion(matches: &ArgMatches) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use rand::{
-        Rng,
+        RngExt,
         distr::{Alphanumeric, SampleString},
     };
     use rsfn_file::{CertError, SignatureError};

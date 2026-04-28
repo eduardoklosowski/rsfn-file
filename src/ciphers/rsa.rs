@@ -127,7 +127,7 @@ impl RsaPublic {
 mod tests {
     use std::str::FromStr;
 
-    use rand::Rng;
+    use rand::RngExt;
 
     use super::*;
 

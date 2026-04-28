@@ -61,7 +61,7 @@ impl Aes256 {
 
 #[cfg(test)]
 mod tests {
-    use rand::Rng;
+    use rand::RngExt;
 
     use super::*;
 
