@@ -16,7 +16,6 @@ dist/$(EXECUTABLE_NAME):
 	mkdir -p dist
 	cargo build --package=$(PACKAGE_NAME) --bin=$(EXECUTABLE_NAME) --release
 	cp target/release/$(EXECUTABLE_NAME) $@
-	strip $@
 
 
 # Formmat

@@ -23,3 +23,6 @@ zip = { version = "8.6", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 rand = "0.10"
+
+[profile.release]
+strip = true

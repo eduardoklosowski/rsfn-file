@@ -22,7 +22,6 @@ jobs:
           mkdir dist
           cargo build --package=rsfn-file --bin=rsfnfile --release
           cp target/release/rsfnfile dist/rsfnfile
-          strip dist/rsfnfile
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
@@ -46,7 +45,6 @@ jobs:
           mkdir dist
           cargo build --package=rsfn-file --bin=rsfnfile --release
           cp target/release/rsfnfile dist/rsfnfile
-          strip dist/rsfnfile
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
