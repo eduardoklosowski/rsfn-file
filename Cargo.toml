@@ -13,7 +13,7 @@ rust-version = "1.89"
 publish = false
 
 [dependencies]
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 clap = { version = "4.6", features = ["cargo"] }
 clap_complete = "4.6"
 libflate = "2.3"
